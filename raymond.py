@@ -46,6 +46,8 @@ def delfile(filename, neighbors, locks, number):
     if not filename in locks:
         return
 
+    acquirelock(locks, neighbors, filename, ldata, number)
+
     del locks[filename]
     dprint("Locks: %s"%str(locks))
     for n in neighbors:
@@ -79,6 +81,7 @@ def parsecmd(cmd, neighbors, locks, ldata, con, number):
 def acquirelock(locks, neighbors, filename, ldata, number):
     if not filename in locks:
         dprint("No such file %s"%filename)
+        return
 
     if locks[filename] != 0:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -77,6 +77,9 @@ def parsecmd(cmd, neighbors, locks, ldata, con, number):
         ldata[filename] += line
 
 def acquirelock(locks, neighbors, filename, ldata, number):
+    if not filename in locks:
+        dprint("No such file %s"%filename)
+
     if locks[filename] != 0:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect(neighbors[locks[filename]])
@@ -84,6 +87,7 @@ def acquirelock(locks, neighbors, filename, ldata, number):
         ldata[filename] = s.recv(2**16)
         locks[filename] = 0
         s.close()
+        dprint("Acquired lock for %s"%filename)
 
 def listenloop(neighbors, port, number):
     locks = {}
@@ -99,25 +103,30 @@ def listenloop(neighbors, port, number):
         dprint("recieved: %s"%msg)
         srcnum = int(msg[:2])
 
-        if msg[2:6] == "cmd ":
-            parsecmd(msg[6:], neighbors, locks, ldata, con, number)
-            # Command line interface parsing
-            pass
-        elif msg[2:6] == "crt ":
-            createfile(msg[6:],neighbors, locks, ldata, srcnum, number)
-            # Check if file exists
-            # Create file command. Foreward to all neighbors
-            pass
-        elif msg[2:6] == "del ":
-            delfile(msg[6:],neighbors, locks, number)
-            # Delete file command. Do same as above
-            pass
-        elif msg[2:6] == "acq ":
-            acquirelock(locks, neighbors, msg[6:], ldata, number)
-            con.send(ldata[msg[6:]])
-            locks[msg[6:]] = srcnum
-            # Get the lock, give to the connecting socket
-            pass
+        try:
+            if msg[2:6] == "cmd ":
+                parsecmd(msg[6:], neighbors, locks, ldata, con, number)
+                # Command line interface parsing
+
+            elif msg[2:6] == "crt ":
+                createfile(msg[6:],neighbors, locks, ldata, srcnum, number)
+                # Check if file exists
+                # Create file command. Foreward to all neighbors
+
+            elif msg[2:6] == "del ":
+                delfile(msg[6:],neighbors, locks, number)
+                # Delete file command. Do same as above
+
+            elif msg[2:6] == "acq ":
+                acquirelock(locks, neighbors, msg[6:], ldata, number)
+                con.send(ldata[msg[6:]])
+                locks[msg[6:]] = srcnum
+                del ldata[msg[6:]]
+                # Get the lock, give to the connecting socket
+
+        except Exception as e:
+            dprint("Error: %s"%str(e))
+
 
 def commandloop(port, number):
     cmd = ''

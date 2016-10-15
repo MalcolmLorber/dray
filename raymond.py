@@ -5,7 +5,7 @@ import sys
 import json
 import threading
 
-DEFAULTPORT=5000
+DEFAULTPORT=50000
 
 def dprint(s):
     if hasattr(dprint, 'number'):
@@ -42,11 +42,9 @@ def createfile(filename, neighbors, locks, ldata, srcnum, number):
         s.send(("%2d"%number) + "crt " + filename)
         s.close()
 
-def delfile(filename, neighbors, locks, number):
+def delfile(filename, neighbors, locks, ldata, number):
     if not filename in locks:
         return
-
-    acquirelock(locks, neighbors, filename, ldata, number)
 
     del locks[filename]
     dprint("Locks: %s"%str(locks))
@@ -65,17 +63,29 @@ def parsecmd(cmd, neighbors, locks, ldata, con, number):
     elif command == "delete":
         # this assumes no spaces in filenames or other invalid characters
         filename = cmd.split(' ')[1]
-        delfile(filename, neighbors, locks, number)
+        acquirelock(locks, neighbors, filename, ldata, number)
+        ldata[filename] = ''
+        delfile(filename, neighbors, locks, ldata, number)
 
     elif command == "read":
+        if len(cmd.split(' ')) < 2:
+            print("read requires filename")
+            return
         filename = cmd.split(' ')[1]
         acquirelock(locks, neighbors, filename, ldata, number)
+        if not filename in locks:
+            return
         print(ldata[filename])
 
     elif command == "append":
+        if len(cmd.split(' ')) < 2:
+            print("append requires filename")
+            return
         filename = cmd.split(' ')[1]
-        line = cmd[len("append " + filename):] + '\n'
+        line = cmd[len(" append " + filename):] + '\n'
         acquirelock(locks, neighbors, filename, ldata, number)
+        if not filename in locks:
+            return
         ldata[filename] += line
 
 def acquirelock(locks, neighbors, filename, ldata, number):
@@ -84,13 +94,16 @@ def acquirelock(locks, neighbors, filename, ldata, number):
         return
 
     if locks[filename] != 0:
+        dprint("Attempting to acquire lock from %d"%locks[filename])
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect(neighbors[locks[filename]])
         s.send(("%2d"%number) + "acq " + filename)
-        ldata[filename] = s.recv(2**16)
+        ldata[filename] = s.recv(2**16)[4:]
         locks[filename] = 0
         s.close()
         dprint("Acquired lock for %s"%filename)
+    else:
+        dprint("Already have lock for %s"%filename)
 
 def listenloop(neighbors, port, number):
     locks = {}
@@ -106,29 +119,29 @@ def listenloop(neighbors, port, number):
         dprint("recieved: %s"%msg)
         srcnum = int(msg[:2])
 
-        try:
-            if msg[2:6] == "cmd ":
-                parsecmd(msg[6:], neighbors, locks, ldata, con, number)
-                # Command line interface parsing
+        # try:
+        if msg[2:6] == "cmd ":
+            parsecmd(msg[6:], neighbors, locks, ldata, con, number)
+            # Command line interface parsing
 
-            elif msg[2:6] == "crt ":
-                createfile(msg[6:],neighbors, locks, ldata, srcnum, number)
-                # Check if file exists
-                # Create file command. Foreward to all neighbors
+        elif msg[2:6] == "crt ":
+            createfile(msg[6:],neighbors, locks, ldata, srcnum, number)
+            # Check if file exists
+            # Create file command. Foreward to all neighbors
 
-            elif msg[2:6] == "del ":
-                delfile(msg[6:],neighbors, locks, number)
-                # Delete file command. Do same as above
+        elif msg[2:6] == "del ":
+            delfile(msg[6:],neighbors, locks, ldata, number)
+            # Delete file command. Do same as above
 
-            elif msg[2:6] == "acq ":
-                acquirelock(locks, neighbors, msg[6:], ldata, number)
-                con.send(ldata[msg[6:]])
-                locks[msg[6:]] = srcnum
-                del ldata[msg[6:]]
-                # Get the lock, give to the connecting socket
+        elif msg[2:6] == "acq ":
+            acquirelock(locks, neighbors, msg[6:], ldata, number)
+            con.send("lol " + ldata[msg[6:]])
+            locks[msg[6:]] = srcnum
+            del ldata[msg[6:]]
+            # Get the lock, give to the connecting socket
 
-        except Exception as e:
-            dprint("Error: %s"%str(e))
+        # except Exception as e:
+        #     dprint("Error: %s"%str(e))
 
 
 def commandloop(port, number):

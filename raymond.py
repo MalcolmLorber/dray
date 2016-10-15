@@ -9,9 +9,9 @@ DEFAULTPORT=50000
 
 def dprint(s):
     if hasattr(dprint, 'number'):
-        print("%02d: %s"%(dprint.number, s))
+        sys.stderr.write("%02d: %s"%(dprint.number, s) + '\n')
     else:
-        print(s)
+        sys.stderr.write(str(s)+'\n')
 
 def findneighbors(treefile, ipfile, number):
     """Magic black box that I don't understand after writing"""

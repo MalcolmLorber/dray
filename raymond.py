@@ -7,12 +7,14 @@ import threading
 
 DEFAULTPORT=50000
 
+#debug print function
 def dprint(s):
     if hasattr(dprint, 'number'):
         sys.stderr.write("%02d: %s"%(dprint.number, s) + '\n')
     else:
         sys.stderr.write(str(s)+'\n')
 
+#Generates the neighbor mapping on each node
 def findneighbors(treefile, ipfile, number):
     """Magic black box that I don't understand after writing"""
     with open(ipfile,'r') as f:
@@ -29,31 +31,40 @@ def findneighbors(treefile, ipfile, number):
     dprint(connections)
     return connections, port
 
+#create a distributed file
 def createfile(filename, neighbors, locks, ldata, srcnum, number):
+    #check for file and create if it does not exist
     if filename in locks:
         return
 
     locks[filename] = srcnum
     ldata[filename] = ''
     dprint("Locks: %s"%str(locks))
+    
+    #update all our neighbors about the new file
     for n in neighbors:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect(neighbors[n])
         s.send(("%2d"%number) + "crt " + filename)
         s.close()
 
+#delte a distributed file
 def delfile(filename, neighbors, locks, ldata, number):
+    #check for file and delte it if it exists
     if not filename in locks:
         return
 
     del locks[filename]
     dprint("Locks: %s"%str(locks))
+    
+    #update all our neighbors to delte the file
     for n in neighbors:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect(neighbors[n])
         s.send(("%2d"%number) + "del " + filename)
         s.close()
 
+#local command line parsing function
 def parsecmd(cmd, neighbors, locks, ldata, con, number):
     command = cmd.split(' ')[0]
     if command == "create":
@@ -68,6 +79,7 @@ def parsecmd(cmd, neighbors, locks, ldata, con, number):
         delfile(filename, neighbors, locks, ldata, number)
 
     elif command == "read":
+        #dont need to do anything fancy or distributed here, just spit out the file
         if len(cmd.split(' ')) < 2:
             print("read requires filename")
             return
@@ -88,6 +100,7 @@ def parsecmd(cmd, neighbors, locks, ldata, con, number):
             return
         ldata[filename] += line
 
+#core function to acquire the lock on a file so we may change it
 def acquirelock(locks, neighbors, filename, ldata, number):
     if not filename in locks:
         dprint("No such file %s"%filename)
@@ -105,6 +118,7 @@ def acquirelock(locks, neighbors, filename, ldata, number):
     else:
         dprint("Already have lock for %s"%filename)
 
+#local thread for listening for messages from our neighbors
 def listenloop(neighbors, port, number):
     locks = {}
     ldata = {}
@@ -144,6 +158,7 @@ def listenloop(neighbors, port, number):
         #     dprint("Error: %s"%str(e))
 
 
+#local console input loop
 def commandloop(port, number):
     cmd = ''
     while cmd != "quit":
@@ -155,6 +170,7 @@ def commandloop(port, number):
             s.send("0 cmd " + cmd)
             s.close()
 
+#init function, create our local console thread and network listening thread and move on
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: %s <id_num>" % sys.argv[0])
